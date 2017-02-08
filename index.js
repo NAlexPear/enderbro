@@ -6,6 +6,7 @@ var config = require( "./config.json" );
 var Discord = require( "discord.js" );
 var express = require( "express" );
 var request = require( "request" );
+var Rcon = require( "modern-rcon" );
 var Tail = require( "tail" ).Tail;
 
 // Apps
@@ -17,8 +18,28 @@ var tail = new Tail(
 );
 
 // Configuration
+var players = config.playerMap;
+
 app.use( bodyParser.json() );
 
+function getPlayerById( id ){
+    return Object
+        .keys( players )
+        .filter(
+            ( handle ) => players[ handle ] == id
+        )[0];
+}
+
+function getPlayerByHandle( handle ){
+    var user = handle;
+    var id = players[ handle ];
+
+    if( id ){
+        user = minecraftBot.users.get( id );
+    }
+
+    return user;
+}
 
 function getPostHandler( channel ){
     var test = new RegExp( config.chatRegExp );
@@ -27,9 +48,13 @@ function getPostHandler( channel ){
     return ( req, res ) => {
         var match = typeof req.body.message === "string" ? req.body.message.match( test ) : "";
         var message;
+        var handle;
+        var user;
 
         if( match && !ignore.test( req.body ) ){
-            message = "`" + match[1].replace( /(\§[A-Z-a-z-0-9])/g, "" ) + "`: " + match[2];
+            handle = match[1].replace( /(\§[A-Z-a-z-0-9])/g, "" );
+            user = getPlayerByHandle( handle );
+            message = "`" + user + "`: " + match[2];
 
 
             channel.sendMessage( message );
@@ -66,7 +91,33 @@ function handleReadyState(){
     tail.on( "line", postTail );
 }
 
+function handleIncomingMessage( message ){
+    var player = getPlayerById( message.author.id ) || message.author.username;
+    var isCorrectChannel = message.channel.id == config.channelId;
+    var isNotBot = message.author.id != minecraftBot.user.id;
+    var rcon = config.rcon;
+    var { host, port, password, timeout } = rcon;
+    var client;
+
+    if( isCorrectChannel && isNotBot ){
+        client = new Rcon( host, port, password, timeout );
+
+        client
+            .connect()
+            .then(
+                () => client.send( `say <${player}> ${message.content}` )
+            )
+            .then(
+                () => client.disconnect()
+            )
+            /* eslint-disable no-console */
+            .catch( console.log );
+    }
+}
+
 minecraftBot.on( "ready", handleReadyState );
+
+minecraftBot.on( "message", handleIncomingMessage );
 
 /* eslint-disable no-console */
 minecraftBot

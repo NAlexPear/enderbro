@@ -17,6 +17,7 @@
     "body-parser": "1.16.0",
     "discord.js": "11.0.0",
     "express": "4.14.1",
+    "modern-rcon": "^1.0.1",
     "request": "2.79.0",
     "tail": "1.2.1"
   }
