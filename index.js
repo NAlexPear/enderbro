@@ -2,17 +2,22 @@
 
 // Node Modules
 var bodyParser = require( "body-parser" );
-var childProcess = require( "child_process" );
 var config = require( "./config.json" );
 var Discord = require( "discord.js" );
 var express = require( "express" );
+var request = require( "request" );
+var Tail = require( "tail" ).Tail;
 
 // Apps
 var app = express();
 var minecraftBot = new Discord.Client();
+var tail = new Tail(
+    `${config.src}/logs/latest.log`,
+    { "follow": true }
+);
 
 // Configuration
-app.use( bodyParser.text() );
+app.use( bodyParser.json() );
 
 
 function getPostHandler( channel ){
@@ -20,11 +25,12 @@ function getPostHandler( channel ){
     var ignore = new RegExp( config.ignoreRegExp );
 
     return ( req, res ) => {
-        var match = req.body.match( test );
+        var match = typeof req.body.message === "string" ? req.body.message.match( test ) : "";
         var message;
 
         if( match && !ignore.test( req.body ) ){
             message = "`" + match[1].replace( /(\§[A-Z-a-z-0-9])/g, "" ) + "`: " + match[2];
+
 
             channel.sendMessage( message );
         }
@@ -39,17 +45,25 @@ function handleRoutes( channel ){
     app.post( config.postRoute, postHandler );
 }
 
-function handleChildProcess(){
-    var cmd = `tail -F ${config.src}/logs/latest.log | grep --line-buffered ": <" | while read x ; do echo -ne $x | curl -X POST -d @- ${config.protocol}://${config.host}/minecraft/hook ; done`;
+function postTail( data ){
+    var reqObject = {
+        "url": config.endpoint,
+        "method": "POST",
+        "json": true,
+        "body": { "message": data }
+    };
 
-    childProcess.exec( cmd );
+    if( data.match( /: </ ) ){
+        request( reqObject );
+    }
 }
-
 function handleReadyState(){
     var channel = minecraftBot.channels.get( config.channelId );
 
     handleRoutes( channel );
-    handleChildProcess();
+
+    tail.watch();
+    tail.on( "line", postTail );
 }
 
 minecraftBot.on( "ready", handleReadyState );
