@@ -35,7 +35,7 @@ function getPlayerByHandle( handle ){
     var id = players[ handle ];
 
     if( id ){
-        user = minecraftBot.users.get( id );
+        user = minecraftBot.users.get( id ).username;
     }
 
     return user;
